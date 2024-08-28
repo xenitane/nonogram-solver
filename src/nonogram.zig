@@ -144,14 +144,14 @@ pub const Nonogram = struct {
         errdefer {
             self.ac.free(state_bytes);
             self.ac.free(state);
-            self.ac.free(state_marker);
         }
         defer self.ac.free(state_marker);
         @memset(state_bytes, 0);
         for (state, 0..) |_, i| {
             state[i] = state_bytes[(i * self.col_length)..((i + 1) * self.col_length)];
         }
-        while (true) {
+        var ii: u32 = 0;
+        while (true) : (ii = ii + 1) {
             var res: bool = false;
             for (self.row_info, 0..) |_, i| {
                 @memcpy(state_marker[0..self.col_length], state[i]);
@@ -163,23 +163,23 @@ pub const Nonogram = struct {
             }
             for (self.col_info, 0..) |_, i| {
                 for (0..self.row_length) |j| {
-                    state_marker[self.col_length + j] = state[j][i];
+                    state_marker[j] = state[j][i];
                 }
                 const is_line_modified = try solveLine(self.ac, state_marker[self.col_length..], self.row_info[i]);
                 if (is_line_modified) {
                     res = true;
                     for (0..self.col_length) |j| {
-                        state[j][i] = state_marker[self.col_length + j];
+                        state[j][i] = state_marker[j];
                     }
                 }
             }
+            std.debug.print("{}\n", .{ii});
             if (!res) {
                 return NonogramErrors.Unsolvable;
             }
-            if (@reduce(.And, state_bytes) != 0) {
+            if (all_non_zero(u8, state_bytes)) {
                 break;
             }
-            break;
         }
         return .{
             .grid = state,
@@ -189,6 +189,15 @@ pub const Nonogram = struct {
     }
 };
 
+fn all_non_zero(comptime T: type, data: []const T) bool {
+    for (data) |d| {
+        if (d == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 const DP = AutoHashMap(struct { usize, usize, usize, u8 }, bool);
 
 fn solveLine(ac: Allocator, state: []u8, line_info: LineInfo) !bool {
@@ -197,12 +206,16 @@ fn solveLine(ac: Allocator, state: []u8, line_info: LineInfo) !bool {
     defer ac.free(iterable_state_itr);
     defer ac.free(iterable_state_res);
 
+    @memset(iterable_state_res, 0);
+    @memset(iterable_state_itr, 0);
+
     var dynamic_data: DP = DP.init(ac);
     defer dynamic_data.deinit();
+    var tried = false;
 
-    _ = try solveLineMain(dynamic_data, state, .{ iterable_state_res, iterable_state_itr }, line_info, 0, 0xff, 0, 0);
+    _ = (try solveLineMain(&dynamic_data, state, .{ iterable_state_res, iterable_state_itr }, line_info, 0, 0xff, 0, 0, &tried));
     if (line_info.len > 0) {
-        _ = try solveLineMain(dynamic_data, state, .{ iterable_state_res, iterable_state_itr }, line_info, 0, line_info.get(0).color, 0, 0);
+        _ = (try solveLineMain(&dynamic_data, state, .{ iterable_state_res, iterable_state_itr }, line_info, 0, line_info.get(0).color, 0, 1, &tried));
     }
     if (std.mem.eql(u8, state, iterable_state_res)) {
         return false;
@@ -211,18 +224,22 @@ fn solveLine(ac: Allocator, state: []u8, line_info: LineInfo) !bool {
     return true;
 }
 
-fn solveLineMain(dynamic_data: DP, original_state: []const u8, iterable_state: struct { []u8, []u8 }, line_info: LineInfo, idx: usize, to_fill: u8, block_idx: usize, cells_filled: usize) !bool {
+fn solveLineMain(dynamic_data: *DP, original_state: []const u8, iterable_state: struct { []u8, []u8 }, line_info: LineInfo, idx: usize, to_fill: u8, block_idx: usize, cells_filled: usize, tried: *bool) !bool {
     if ((idx <= original_state.len) and (block_idx <= line_info.len) and (cells_filled <= original_state.len)) {
         if (!dynamic_data.contains(.{ idx, block_idx, cells_filled, to_fill })) {
             if (idx == original_state.len) {
                 const res = if ((block_idx == line_info.len) and (cells_filled == 0)) true else false;
+                if (res and !tried.*) {
+                    tried.* = true;
+                    @memcpy(iterable_state[0], iterable_state[1]);
+                }
                 try dynamic_data.put(.{ idx, block_idx, cells_filled, to_fill }, res);
             } else if (block_idx == line_info.len) {
                 const res = switch (original_state[idx]) {
                     0x00, 0xff => ffblk: {
                         defer iterable_state[1][idx] = 0;
                         iterable_state[1][idx] = 0xff;
-                        break :ffblk try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx, 0);
+                        break :ffblk try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx, 0, tried);
                     },
                     else => false,
                 };
@@ -233,15 +250,32 @@ fn solveLineMain(dynamic_data: DP, original_state: []const u8, iterable_state: s
                         defer iterable_state[1][idx] = 0;
                         var res_00 = false;
                         if (to_fill == 0xff) {
-                            if (cells_filled == line_info.get(block_idx).size) {
-                                //
-
-                            } else {
-                                //
+                            iterable_state[1][idx] = to_fill;
+                            if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx, 0, tried)) {
+                                res_00 = true;
+                            }
+                            if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, line_info.get(block_idx).color, block_idx, 1, tried)) {
+                                res_00 = true;
                             }
                         } else {
-                            //
-                            res_00 = res_00 or (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx, 0));
+                            const block_info = line_info.get(block_idx);
+                            if (to_fill == block_info.color) {
+                                iterable_state[1][idx] = to_fill;
+                                if (cells_filled == line_info.get(block_idx).size) {
+                                    if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx + 1, 0, tried)) {
+                                        res_00 = true;
+                                    }
+                                    if ((block_idx + 1 != line_info.len) and (to_fill != line_info.get(block_idx + 1).color)) {
+                                        if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, line_info.get(block_idx + 1).color, block_idx + 1, 1, tried)) {
+                                            res_00 = true;
+                                        }
+                                    }
+                                } else {
+                                    if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, to_fill, block_idx, cells_filled + 1, tried)) {
+                                        res_00 = true;
+                                    }
+                                }
+                            }
                         }
                         break :blk00 res_00;
                     },
@@ -253,8 +287,12 @@ fn solveLineMain(dynamic_data: DP, original_state: []const u8, iterable_state: s
                         var res_ff = false;
 
                         iterable_state[1][idx] = 0xff;
-                        res_ff = res_ff or (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx, 0));
-                        res_ff = res_ff or (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, line_info.get(block_idx).color, block_idx, 1));
+                        if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx, 0, tried)) {
+                            res_ff = true;
+                        }
+                        if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, line_info.get(block_idx).color, block_idx, 1, tried)) {
+                            res_ff = true;
+                        }
                         break :blkff res_ff;
                     },
                     else => blkelse: {
@@ -265,14 +303,20 @@ fn solveLineMain(dynamic_data: DP, original_state: []const u8, iterable_state: s
                         defer iterable_state[1][idx] = 0;
                         var res_else = false;
 
-                        iterable_state[1][idx] = original_state[idx];
-                        if (line_info.get(block_idx).size == cells_filled) {
-                            res_else = res_else or try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx + 1, 0);
+                        iterable_state[1][idx] = to_fill;
+                        if (block_info.size == cells_filled) {
+                            if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, 0xff, block_idx + 1, 0, tried)) {
+                                res_else = true;
+                            }
                             if ((block_idx + 1 != line_info.len) and (to_fill != line_info.get(block_idx + 1).color)) {
-                                res_else = res_else or (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, line_info.get(block_idx + 1).color, block_idx + 1, 1));
+                                if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, line_info.get(block_idx + 1).color, block_idx + 1, 1, tried)) {
+                                    res_else = true;
+                                }
                             }
                         } else {
-                            res_else = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, to_fill, block_idx, cells_filled + 1);
+                            if (try solveLineMain(dynamic_data, original_state, iterable_state, line_info, idx + 1, to_fill, block_idx, cells_filled + 1, tried)) {
+                                res_else = true;
+                            }
                         }
                         break :blkelse res_else;
                     },
@@ -287,14 +331,6 @@ fn solveLineMain(dynamic_data: DP, original_state: []const u8, iterable_state: s
         return res;
     } else {
         return false;
-    }
-}
-
-fn update_state_data(state_data: struct { []u8, []u8 }, till: usize) void {
-    for (0..till) |i| {
-        if (state_data[0][i] != state_data[1][i]) {
-            state_data[0][i] = 0;
-        }
     }
 }
 
@@ -318,28 +354,104 @@ test "solve line test" {
     const state = try ally.alloc(u8, 3);
     defer ally.free(state);
     @memset(state, 0);
-    try testing.expectEqual(true, try solveLine(ally, state, line_info));
+    const res = try solveLine(ally, state, line_info);
+    try testing.expectEqual(true, res);
     try testing.expectEqualSlices(u8, &[_]u8{ 0x01, 0xff, 0x01 }, state);
 }
 
 test "nonogram tests" {
-    var ng = try Nonogram.init(ally, 5, 5);
+    var ng = try Nonogram.init(ally, 10, 10);
     defer ng.deinit();
 
-    try ng.row_info[0].append(ally, .{ .size = 5, .color = 1 });
-    try ng.row_info[1].append(ally, .{ .size = 5, .color = 1 });
-    try ng.row_info[2].append(ally, .{ .size = 5, .color = 1 });
-    try ng.row_info[3].append(ally, .{ .size = 5, .color = 1 });
-    try ng.row_info[4].append(ally, .{ .size = 5, .color = 1 });
+    try ng.row_info[0].append(ally, .{ .size = 10, .color = 1 });
 
-    try ng.col_info[0].append(ally, .{ .size = 5, .color = 1 });
-    try ng.col_info[1].append(ally, .{ .size = 5, .color = 1 });
-    try ng.col_info[2].append(ally, .{ .size = 5, .color = 1 });
-    try ng.col_info[3].append(ally, .{ .size = 5, .color = 1 });
-    try ng.col_info[4].append(ally, .{ .size = 5, .color = 1 });
+    try ng.row_info[1].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[1].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[2].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[2].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[2].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[3].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[3].append(ally, .{ .size = 3, .color = 1 });
+    try ng.row_info[3].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[4].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[4].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[5].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[5].append(ally, .{ .size = 3, .color = 1 });
+    try ng.row_info[5].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[6].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[6].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[7].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[7].append(ally, .{ .size = 3, .color = 1 });
+    try ng.row_info[7].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[8].append(ally, .{ .size = 1, .color = 1 });
+    try ng.row_info[8].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.row_info[9].append(ally, .{ .size = 10, .color = 1 });
+
+    try ng.col_info[0].append(ally, .{ .size = 10, .color = 1 });
+
+    try ng.col_info[1].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[1].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[2].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[2].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[2].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[2].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[2].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[3].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[3].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[3].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[3].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[3].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[4].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[4].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[4].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[4].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[4].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[5].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[5].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[6].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[6].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[7].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[7].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[7].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[8].append(ally, .{ .size = 1, .color = 1 });
+    try ng.col_info[8].append(ally, .{ .size = 1, .color = 1 });
+
+    try ng.col_info[9].append(ally, .{ .size = 10, .color = 1 });
 
     try testing.expectEqual(true, try ng.validate());
 
-    // const nonogram_solution = try ng.solve();
-    // try testing.expectEqualSlices(u8, &[_]u8{1} ** 25, nonogram_solution.grid_bytes);
+    const soln = &[_][10]u8{
+        [10]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01 },
+        [10]u8{ 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01 },
+        [10]u8{ 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0x01 },
+        [10]u8{ 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01 },
+        [10]u8{ 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01 },
+        [10]u8{ 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01 },
+        [10]u8{ 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01 },
+        [10]u8{ 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01 },
+        [10]u8{ 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01 },
+        [10]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01 },
+    };
+
+    const nonogram_solution = try ng.solve();
+    defer nonogram_solution.deinit();
+    for (nonogram_solution.grid, 0..) |_, i| {
+        std.debug.print("{}\n", .{i});
+        try testing.expectEqualSlices(u8, &soln[i], nonogram_solution.grid[i]);
+    }
 }
