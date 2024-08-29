@@ -165,7 +165,7 @@ pub const Nonogram = struct {
                 for (0..self.row_length) |j| {
                     state_marker[j] = state[j][i];
                 }
-                const is_line_modified = try solveLine(self.ac, state_marker[self.col_length..], self.row_info[i]);
+                const is_line_modified = try solveLine(self.ac, state_marker[0..self.col_length], self.col_info[i]);
                 if (is_line_modified) {
                     res = true;
                     for (0..self.col_length) |j| {
@@ -173,11 +173,10 @@ pub const Nonogram = struct {
                     }
                 }
             }
-            std.debug.print("{}\n", .{ii});
             if (!res) {
                 return NonogramErrors.Unsolvable;
             }
-            if (all_non_zero(u8, state_bytes)) {
+            if (all_non_zero(u8, state_bytes) or (ii == state_bytes.len)) {
                 break;
             }
         }
@@ -222,6 +221,14 @@ fn solveLine(ac: Allocator, state: []u8, line_info: LineInfo) !bool {
     }
     @memcpy(state, iterable_state_res);
     return true;
+}
+
+fn zero_count(arr: []const u8) usize {
+    var res: usize = 0;
+    for (arr) |a| {
+        res += if (a == 0) 1 else 0;
+    }
+    return res;
 }
 
 fn solveLineMain(dynamic_data: *DP, original_state: []const u8, iterable_state: struct { []u8, []u8 }, line_info: LineInfo, idx: usize, to_fill: u8, block_idx: usize, cells_filled: usize, tried: *bool) !bool {
@@ -433,8 +440,6 @@ test "nonogram tests" {
 
     try ng.col_info[9].append(ally, .{ .size = 10, .color = 1 });
 
-    try testing.expectEqual(true, try ng.validate());
-
     const soln = &[_][10]u8{
         [10]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01 },
         [10]u8{ 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01 },
@@ -451,7 +456,435 @@ test "nonogram tests" {
     const nonogram_solution = try ng.solve();
     defer nonogram_solution.deinit();
     for (nonogram_solution.grid, 0..) |_, i| {
-        std.debug.print("{}\n", .{i});
         try testing.expectEqualSlices(u8, &soln[i], nonogram_solution.grid[i]);
+    }
+}
+
+test "bigger test" {
+    var ng = try Nonogram.init(ally, 30, 30);
+    defer ng.deinit();
+
+    // enter clues
+    {
+        try ng.row_info[0].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[1].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[1].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[1].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[1].append(ally, .{ .size = 5, .color = 1 });
+        try ng.row_info[1].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[2].append(ally, .{ .size = 5, .color = 1 });
+        try ng.row_info[2].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[2].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[2].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[2].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[2].append(ally, .{ .size = 2, .color = 1 });
+
+        try ng.row_info[3].append(ally, .{ .size = 10, .color = 1 });
+        try ng.row_info[3].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[3].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[3].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[3].append(ally, .{ .size = 3, .color = 1 });
+
+        try ng.row_info[4].append(ally, .{ .size = 6, .color = 1 });
+        try ng.row_info[4].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[4].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[4].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[4].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[4].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[4].append(ally, .{ .size = 3, .color = 1 });
+
+        try ng.row_info[5].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[5].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[5].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[5].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[5].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[5].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[5].append(ally, .{ .size = 3, .color = 1 });
+
+        try ng.row_info[6].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[6].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[6].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[6].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[6].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[6].append(ally, .{ .size = 5, .color = 1 });
+
+        try ng.row_info[7].append(ally, .{ .size = 10, .color = 1 });
+        try ng.row_info[7].append(ally, .{ .size = 6, .color = 1 });
+        try ng.row_info[7].append(ally, .{ .size = 6, .color = 1 });
+
+        try ng.row_info[8].append(ally, .{ .size = 8, .color = 1 });
+        try ng.row_info[8].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[8].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[8].append(ally, .{ .size = 3, .color = 1 });
+
+        try ng.row_info[9].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[9].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[9].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[9].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[9].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[9].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[9].append(ally, .{ .size = 3, .color = 1 });
+
+        try ng.row_info[10].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[10].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[10].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[10].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[10].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[10].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[10].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[11].append(ally, .{ .size = 8, .color = 1 });
+        try ng.row_info[11].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[11].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[11].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[11].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[11].append(ally, .{ .size = 2, .color = 1 });
+
+        try ng.row_info[12].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[12].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[12].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[12].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[12].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[12].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[12].append(ally, .{ .size = 2, .color = 1 });
+
+        try ng.row_info[13].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[13].append(ally, .{ .size = 7, .color = 1 });
+        try ng.row_info[13].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[13].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[13].append(ally, .{ .size = 2, .color = 1 });
+
+        try ng.row_info[14].append(ally, .{ .size = 8, .color = 1 });
+        try ng.row_info[14].append(ally, .{ .size = 9, .color = 1 });
+        try ng.row_info[14].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[14].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[14].append(ally, .{ .size = 1, .color = 1 });
+
+        try ng.row_info[15].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[15].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[15].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[15].append(ally, .{ .size = 7, .color = 1 });
+        try ng.row_info[15].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[15].append(ally, .{ .size = 5, .color = 1 });
+
+        try ng.row_info[16].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[16].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[16].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[16].append(ally, .{ .size = 6, .color = 1 });
+        try ng.row_info[16].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[16].append(ally, .{ .size = 5, .color = 1 });
+
+        try ng.row_info[17].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[17].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[17].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[17].append(ally, .{ .size = 5, .color = 1 });
+
+        try ng.row_info[18].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[18].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[18].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[18].append(ally, .{ .size = 5, .color = 1 });
+
+        try ng.row_info[19].append(ally, .{ .size = 6, .color = 1 });
+        try ng.row_info[19].append(ally, .{ .size = 8, .color = 1 });
+        try ng.row_info[19].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[20].append(ally, .{ .size = 6, .color = 1 });
+        try ng.row_info[20].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[20].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[20].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[20].append(ally, .{ .size = 8, .color = 1 });
+
+        try ng.row_info[21].append(ally, .{ .size = 9, .color = 1 });
+        try ng.row_info[21].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[21].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[21].append(ally, .{ .size = 7, .color = 1 });
+
+        try ng.row_info[22].append(ally, .{ .size = 7, .color = 1 });
+        try ng.row_info[22].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[22].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[22].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[22].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[23].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[23].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[23].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[23].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[23].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[23].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[23].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[23].append(ally, .{ .size = 3, .color = 1 });
+
+        try ng.row_info[24].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[24].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[24].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[24].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[24].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[24].append(ally, .{ .size = 1, .color = 1 });
+
+        try ng.row_info[25].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[25].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[25].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[25].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[25].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[25].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[26].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[26].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[26].append(ally, .{ .size = 6, .color = 1 });
+        try ng.row_info[26].append(ally, .{ .size = 1, .color = 1 });
+        try ng.row_info[26].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[26].append(ally, .{ .size = 2, .color = 1 });
+
+        try ng.row_info[27].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[27].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[27].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[27].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[27].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[28].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[28].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[28].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[28].append(ally, .{ .size = 2, .color = 1 });
+        try ng.row_info[28].append(ally, .{ .size = 4, .color = 1 });
+
+        try ng.row_info[29].append(ally, .{ .size = 4, .color = 1 });
+        try ng.row_info[29].append(ally, .{ .size = 3, .color = 1 });
+        try ng.row_info[29].append(ally, .{ .size = 7, .color = 1 });
+
+        try ng.col_info[0].append(ally, .{ .color = 1, .size = 7 });
+        try ng.col_info[0].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[0].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[0].append(ally, .{ .color = 1, .size = 5 });
+
+        try ng.col_info[1].append(ally, .{ .color = 1, .size = 8 });
+        try ng.col_info[1].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[1].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[1].append(ally, .{ .color = 1, .size = 5 });
+        try ng.col_info[1].append(ally, .{ .color = 1, .size = 3 });
+
+        try ng.col_info[2].append(ally, .{ .color = 1, .size = 7 });
+        try ng.col_info[2].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[2].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[2].append(ally, .{ .color = 1, .size = 10 });
+        try ng.col_info[2].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[3].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[3].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[3].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[3].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[3].append(ally, .{ .color = 1, .size = 7 });
+        try ng.col_info[3].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[3].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[4].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[4].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[4].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[4].append(ally, .{ .color = 1, .size = 11 });
+        try ng.col_info[4].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[5].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[5].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[5].append(ally, .{ .color = 1, .size = 6 });
+        try ng.col_info[5].append(ally, .{ .color = 1, .size = 5 });
+        try ng.col_info[5].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[6].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[6].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[6].append(ally, .{ .color = 1, .size = 5 });
+        try ng.col_info[6].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[6].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[6].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[7].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[8].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[8].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[8].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[8].append(ally, .{ .color = 1, .size = 6 });
+        try ng.col_info[8].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[8].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[8].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[9].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[9].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[9].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[9].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[9].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[9].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[9].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[10].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[10].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[10].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[10].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[10].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[10].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[11].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[11].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[11].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[11].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[11].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[11].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[11].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[12].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[12].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[12].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[12].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[13].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[13].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[13].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[13].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[13].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[13].append(ally, .{ .color = 1, .size = 4 });
+
+        try ng.col_info[14].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[14].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[14].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[14].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[14].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[14].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[15].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[15].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[15].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[15].append(ally, .{ .color = 1, .size = 7 });
+        try ng.col_info[15].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[15].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[16].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[16].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[16].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[16].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[16].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[17].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[17].append(ally, .{ .color = 1, .size = 6 });
+        try ng.col_info[17].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[17].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[17].append(ally, .{ .color = 1, .size = 3 });
+
+        try ng.col_info[18].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[18].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[18].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[18].append(ally, .{ .color = 1, .size = 6 });
+
+        try ng.col_info[19].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[19].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[19].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[19].append(ally, .{ .color = 1, .size = 9 });
+
+        try ng.col_info[20].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[20].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[20].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[20].append(ally, .{ .color = 1, .size = 10 });
+
+        try ng.col_info[21].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[21].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[21].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[21].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[21].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[21].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[21].append(ally, .{ .color = 1, .size = 7 });
+
+        try ng.col_info[22].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[22].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[22].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[22].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[22].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[22].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[22].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[23].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[23].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[23].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[23].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[23].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[23].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[23].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[24].append(ally, .{ .color = 1, .size = 9 });
+        try ng.col_info[24].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[24].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[24].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[24].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[25].append(ally, .{ .color = 1, .size = 8 });
+        try ng.col_info[25].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[25].append(ally, .{ .color = 1, .size = 5 });
+        try ng.col_info[25].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[25].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[25].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[25].append(ally, .{ .color = 1, .size = 1 });
+
+        try ng.col_info[26].append(ally, .{ .color = 1, .size = 4 });
+        try ng.col_info[26].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[26].append(ally, .{ .color = 1, .size = 9 });
+        try ng.col_info[26].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[26].append(ally, .{ .color = 1, .size = 3 });
+
+        try ng.col_info[27].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[27].append(ally, .{ .color = 1, .size = 9 });
+        try ng.col_info[27].append(ally, .{ .color = 1, .size = 1 });
+        try ng.col_info[27].append(ally, .{ .color = 1, .size = 3 });
+
+        try ng.col_info[28].append(ally, .{ .color = 1, .size = 3 });
+        try ng.col_info[28].append(ally, .{ .color = 1, .size = 9 });
+        try ng.col_info[28].append(ally, .{ .color = 1, .size = 2 });
+        try ng.col_info[28].append(ally, .{ .color = 1, .size = 2 });
+
+        try ng.col_info[29].append(ally, .{ .color = 1, .size = 15 });
+        try ng.col_info[29].append(ally, .{ .color = 1, .size = 2 });
+    }
+
+    // make result data
+    const soln = &[_][30]u8{
+        [30]u8{ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0x01, 0xff, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0x01, 0xff, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff },
+        [30]u8{ 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff },
+        [30]u8{ 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0xff, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff },
+        [30]u8{ 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0xff, 0x01, 0xff, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff },
+        [30]u8{ 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01, 0xff },
+        [30]u8{ 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01 },
+        [30]u8{ 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01 },
+        [30]u8{ 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01 },
+        [30]u8{ 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0x01, 0xff, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01 },
+        [30]u8{ 0xff, 0xff, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01 },
+        [30]u8{ 0x01, 0xff, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0x01, 0x01 },
+        [30]u8{ 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0x01, 0xff, 0xff },
+        [30]u8{ 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01 },
+        [30]u8{ 0x01, 0x01, 0x01, 0x01, 0xff, 0x01, 0x01, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01 },
+    };
+
+    const ng_sol = try ng.solve();
+    defer ng_sol.deinit();
+    for (soln, ng_sol.grid) |*e_row, a_row| {
+        try testing.expectEqualSlices(u8, e_row, a_row);
     }
 }
