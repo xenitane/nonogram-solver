@@ -28,14 +28,23 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib = b.addStaticLibrary(.{
-        .name = "nonogram-solver",
+    const lib_nonogram = b.addStaticLibrary(.{
+        .name = "nonogram",
         .root_source_file = b.path("src/nonogram.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    b.installArtifact(lib);
+    b.installArtifact(lib_nonogram);
+
+    const lib_serializer = b.addStaticLibrary(.{
+        .name = "serializer",
+        .root_source_file = b.path("src/serializer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    b.installArtifact(lib_serializer);
 
     const exe = b.addExecutable(.{
         .name = "nonogram-solver",
@@ -57,13 +66,21 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const lib_unit_tests = b.addTest(.{
+    const lib_nono_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/nonogram.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+    const run_lib_nono_unit_tests = b.addRunArtifact(lib_nono_unit_tests);
+
+    const lib_serial_unit_tests = b.addTest(.{
+        .root_source_file = b.path("src/serializer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const run_lib_serial_unit_tests = b.addRunArtifact(lib_serial_unit_tests);
 
     const exe_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/main.zig"),
@@ -74,6 +91,7 @@ pub fn build(b: *std.Build) void {
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
+    test_step.dependOn(&run_lib_nono_unit_tests.step);
+    test_step.dependOn(&run_lib_serial_unit_tests.step);
     test_step.dependOn(&run_exe_unit_tests.step);
 }
