@@ -13,7 +13,7 @@ const PixelMap = types.PixelMap;
 
 const NonogramErrors = errors.NonogramErrors;
 
-const white: u32 = 0xffffffff;
+const white_pixel: u32 = 0xffffffff;
 
 pub fn solve(ngi: *const NonogramInput) !NonogramSolution {
     if (!(try validate(ngi))) return NonogramErrors.PixelCountMismatch;
@@ -33,35 +33,38 @@ pub fn solve(ngi: *const NonogramInput) !NonogramSolution {
 
     var ii: u32 = 0;
     while (true) : (ii = ii + 1) {
-        var res: bool = false;
-        for (ngi.row_inf, 0..) |_, i| {
-            @memcpy(state_marker[0..ngi.col_qty], state[i]);
-            const is_line_modified = try solveLine(ngi.ac, state_marker[0..ngi.col_qty], ngi.row_inf[i]);
-            if (is_line_modified) {
-                res = true;
-                @memcpy(state[i], state_marker[0..ngi.col_qty]);
-            }
-        }
-        for (ngi.col_inf, 0..) |_, i| {
-            for (0..ngi.row_qty) |j| state_marker[j] = state[j][i];
-            const is_line_modified = try solveLine(ngi.ac, state_marker[0..ngi.row_qty], ngi.col_inf[i]);
-            if (is_line_modified) {
-                res = true;
-                for (0..ngi.row_qty) |j| state[j][i] = state_marker[j];
-            }
-        }
-        if (!res) return NonogramErrors.Unsolvable;
-
-        if (std.mem.indexOfScalar(u32, state_bytes, 0) == null) break;
-
         if (ii == state_bytes.len) return NonogramErrors.Unsolvable;
+        var res: bool = false;
+
+        for (ngi.col_inf, 0..) |_, i| res = (try solveRow(state_marker[0..ngi.col_qty], ngi, state, i)) or res;
+        for (ngi.col_inf, 0..) |_, i| res = (try solveCol(state_marker[0..ngi.row_qty], ngi, state, i)) or res;
+
+        if (!res) return NonogramErrors.Unsolvable;
+        if (std.mem.indexOfScalar(u32, state_bytes, 0) == null) break;
     }
     return .{ .grid = state, .grid_bytes = state_bytes, .ac = ngi.ac };
+}
+
+pub fn solveRow(state_marker: []u32, ngi: *const NonogramInput, state: [][]u32, idx: usize) !bool {
+    @memcpy(state_marker, state[idx]);
+    if (try solveLine(ngi.ac, state_marker[0..ngi.col_qty], ngi.row_inf[idx])) {
+        @memcpy(state[idx], state_marker[0..ngi.col_qty]);
+        return true;
+    } else return false;
+}
+
+pub fn solveCol(state_marker: []u32, ngi: *const NonogramInput, state: [][]u32, i: usize) !bool {
+    for (0..ngi.row_qty) |j| state_marker[j] = state[j][i];
+    if (try solveLine(ngi.ac, state_marker[0..ngi.row_qty], ngi.col_inf[i])) {
+        for (0..ngi.row_qty) |j| state[j][i] = state_marker[j];
+        return true;
+    } else return false;
 }
 
 fn validate(ngi: *const NonogramInput) !bool {
     var pixel_frq = PixelMap.init(ngi.ac);
     defer pixel_frq.deinit();
+
     for (ngi.row_inf) |row| {
         if (0 == row.len) continue;
 
@@ -76,7 +79,6 @@ fn validate(ngi: *const NonogramInput) !bool {
 
             aa.* += block.size;
             pixel_count += block.size;
-
             if (block.color != prev_block.color) pixel_count += 1;
 
             prev_block = block;
@@ -92,16 +94,13 @@ fn validate(ngi: *const NonogramInput) !bool {
 
         for (col) |block| {
             const frq = pixel_frq.getPtr(block.color) orelse return false;
-
             if (frq.* < block.size) return false;
 
             frq.* -= block.size;
             pixel_count += block.size;
-
-            if (frq.* == 0) _ = pixel_frq.remove(block.color);
-
             if (block.color != prev_block.color) pixel_count += 1;
 
+            if (frq.* == 0) _ = pixel_frq.remove(block.color);
             prev_block = block;
         }
 
@@ -114,19 +113,17 @@ fn validate(ngi: *const NonogramInput) !bool {
 
 fn solveLine(ac: Allocator, state: []u32, line_info: []const Block) !bool {
     const iterable_state_res = try ac.alloc(u32, state.len);
+    defer ac.free(iterable_state_res);
     const iterable_state_itr = try ac.alloc(u32, state.len);
     defer ac.free(iterable_state_itr);
-    defer ac.free(iterable_state_res);
+    var dynamic_data: SolutionDP = SolutionDP.init(ac);
+    defer dynamic_data.deinit();
+    var tried = false;
 
     @memset(iterable_state_res, 0);
     @memset(iterable_state_itr, 0);
 
-    var dynamic_data: SolutionDP = SolutionDP.init(ac);
-    defer dynamic_data.deinit();
-
-    var tried = false;
-
-    _ = (try solveLineMain(&dynamic_data, state, .{ iterable_state_res, iterable_state_itr }, line_info, .{ 0, 0, white, 0 }, &tried));
+    _ = (try solveLineMain(&dynamic_data, state, .{ iterable_state_res, iterable_state_itr }, line_info, .{ 0, 0, white_pixel, 0 }, &tried));
     if (line_info.len > 0) _ = (try solveLineMain(&dynamic_data, state, .{ iterable_state_res, iterable_state_itr }, line_info, .{ 0, 0, line_info[0].color, 1 }, &tried));
 
     if (std.mem.eql(u32, state, iterable_state_res)) return false;
@@ -151,10 +148,10 @@ fn solveLineMain(dynamic_data: *SolutionDP, original_state: []const u32, iterabl
             }
             break :blk0 res;
         } else if (block_idx == line_info.len) switch (original_state[idx]) {
-            0x00, white => blk0: {
-                iterable_state[1][idx] = white;
+            0x00, white_pixel => blk0: {
+                iterable_state[1][idx] = white_pixel;
                 defer iterable_state[1][idx] = 0;
-                break :blk0 try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx, white, 0 }, tried);
+                break :blk0 try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx, white_pixel, 0 }, tried);
             },
             else => false,
         } else switch (original_state[idx]) {
@@ -162,18 +159,18 @@ fn solveLineMain(dynamic_data: *SolutionDP, original_state: []const u32, iterabl
                 iterable_state[1][idx] = to_fill;
                 defer iterable_state[1][idx] = 0;
 
-                break :blk0 if (to_fill == white) blk1: {
-                    const res_put_wall_next = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx, white, 0 }, tried);
+                break :blk0 if (to_fill == white_pixel) blk1: {
+                    const res_put_wall_next = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx, white_pixel, 0 }, tried);
                     const res_start_block_next = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx, line_info[block_idx].color, 1 }, tried);
                     break :blk1 res_put_wall_next or res_start_block_next;
                 } else if (to_fill == line_info[block_idx].color) if (cells_filled == line_info[block_idx].size) blk1: {
-                    const res_put_wall_next = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx + 1, white, 0 }, tried);
+                    const res_put_wall_next = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx + 1, white_pixel, 0 }, tried);
                     const res_start_block_next_if_possible = if ((block_idx + 1 != line_info.len) and (to_fill != line_info[block_idx + 1].color)) try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx + 1, line_info[block_idx + 1].color, 1 }, tried) else false;
                     break :blk1 res_put_wall_next or res_start_block_next_if_possible;
                 } else try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx, to_fill, cells_filled + 1 }, tried) else false;
             },
-            white => blk0: {
-                if (to_fill != white) break :blk0 false;
+            white_pixel => blk0: {
+                if (to_fill != white_pixel) break :blk0 false;
 
                 iterable_state[1][idx] = to_fill;
                 defer iterable_state[1][idx] = 0;
@@ -189,7 +186,7 @@ fn solveLineMain(dynamic_data: *SolutionDP, original_state: []const u32, iterabl
                 defer iterable_state[1][idx] = 0;
 
                 break :blk0 if (line_info[block_idx].size == cells_filled) blk1: {
-                    const res_put_wall_next = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx + 1, white, 0 }, tried);
+                    const res_put_wall_next = try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx + 1, white_pixel, 0 }, tried);
                     const res_start_block_next_if_possible = if ((block_idx + 1 != line_info.len) and (to_fill != line_info[block_idx + 1].color)) try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx + 1, line_info[block_idx + 1].color, 1 }, tried) else false;
                     break :blk1 res_put_wall_next or res_start_block_next_if_possible;
                 } else try solveLineMain(dynamic_data, original_state, iterable_state, line_info, .{ idx + 1, block_idx, to_fill, cells_filled + 1 }, tried);
@@ -214,5 +211,5 @@ test solveLineMain {
 
     const soln = try solveLine(ally, mem, &[_]Block{ Block{ .size = 3, .color = 1 }, Block{ .size = 1, .color = 1 } });
     try testing.expectEqual(true, soln);
-    try testing.expectEqualSlices(u32, &[_]u32{ 1, 1, 1, white, 1 }, mem);
+    try testing.expectEqualSlices(u32, &[_]u32{ 1, 1, 1, white_pixel, 1 }, mem);
 }

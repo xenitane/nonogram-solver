@@ -28,24 +28,6 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib_nonogram = b.addStaticLibrary(.{
-        .name = "nonogram",
-        .root_source_file = b.path("src/nonogram.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    b.installArtifact(lib_nonogram);
-
-    const lib_serializer = b.addStaticLibrary(.{
-        .name = "serializer",
-        .root_source_file = b.path("src/serializer.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    b.installArtifact(lib_serializer);
-
     const exe = b.addExecutable(.{
         .name = "nonogram-solver",
         .root_source_file = b.path("src/main.zig"),

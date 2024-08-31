@@ -18,17 +18,18 @@ pub fn serializeFileFromPath(ac: Allocator, file_path: []const u8) !NonogramInpu
 }
 
 pub fn serializeFile(ac: Allocator, file: std.fs.File) !NonogramInput {
-    const file_content_raw = try file.readToEndAlloc(ac, 1 << 20);
+    const file_size = try file.getEndPos();
+    const file_content_raw = try file.readToEndAlloc(ac, file_size);
     defer ac.free(file_content_raw);
-    const file_content = trimWhiteSpace(file_content_raw);
-    return serializeContent(ac, file_content);
+    return serializeContent(ac, file_content_raw);
 }
 
 fn trimWhiteSpace(buf: []const u8) []const u8 {
     return std.mem.trim(u8, buf, &std.ascii.whitespace);
 }
 
-pub fn serializeContent(ac: Allocator, file_content: []const u8) !NonogramInput {
+pub fn serializeContent(ac: Allocator, file_content_raw: []const u8) !NonogramInput {
+    const file_content = trimWhiteSpace(file_content_raw);
     var file_itr = std.mem.splitScalar(u8, file_content, '\n');
 
     var dims = std.mem.splitScalar(u8, trimWhiteSpace(file_itr.next() orelse return SerializationError.InvalidInput), ',');
